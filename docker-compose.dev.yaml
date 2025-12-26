@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: postgres:17-bookworm
+    restart: on-failure
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: redis_course
+    mem_limit: 128m
+
+  redis:
+    image: redis:8.4
+    restart: on-failure
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:
