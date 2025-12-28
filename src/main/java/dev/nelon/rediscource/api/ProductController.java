@@ -6,6 +6,7 @@ import dev.nelon.rediscource.domain.ProductService;
 import dev.nelon.rediscource.domain.db.ProductEntity;
 import dev.nelon.rediscource.domain.service.DbProductService;
 import dev.nelon.rediscource.domain.service.ManualCachingProductService;
+import dev.nelon.rediscource.domain.service.SpringAnnotationCachingProductService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -20,6 +21,7 @@ public class ProductController {
 	
 	private final DbProductService dbProductService;
 	private final ManualCachingProductService manualCachingProductService;
+	private final SpringAnnotationCachingProductService springAnnotationCachingProductService;
 	private final ProductDtoMapper mapper;
 	
 	@PostMapping
@@ -49,14 +51,6 @@ public class ProductController {
 		return ResponseEntity.ok(dto);
 	}
 	
-	private ProductService resolveProductService(CacheMode cacheMode) {
-		return switch (cacheMode) {
-			case NONE_CACHE -> dbProductService;
-			case MANUAL -> manualCachingProductService;
-		};
-	}
-	
-	
 	@PutMapping("/{id}")
 	public ResponseEntity<ProductDto> update(
 		@PathVariable("id") Long id,
@@ -85,6 +79,13 @@ public class ProductController {
 		return ResponseEntity.noContent().build();
 	}
 	
+	private ProductService resolveProductService(CacheMode cacheMode) {
+		return switch (cacheMode) {
+			case NONE_CACHE -> dbProductService;
+			case MANUAL -> manualCachingProductService;
+			case SPRING -> springAnnotationCachingProductService;
+		};
+	}
 	
 }
 
