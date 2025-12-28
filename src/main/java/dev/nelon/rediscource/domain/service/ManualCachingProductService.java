@@ -9,8 +9,11 @@ import dev.nelon.rediscource.domain.db.ProductEntity;
 import dev.nelon.rediscource.domain.db.ProductRepository;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+
+import java.util.concurrent.TimeUnit;
 
 @Service
 @Slf4j
@@ -18,10 +21,10 @@ import org.springframework.stereotype.Service;
 public class ManualCachingProductService implements ProductService {
 	
 	private final ProductRepository productRepository;
-	private final StringRedisTemplate stringRedisTemplate;
-	private final ObjectMapper objectMapper;
+	private final RedisTemplate<String, ProductEntity> redisTemplate;
 	
 	private static final String CACHE_KEY_PREFIX ="product:";
+	private static final long CACHE_TTL_MINUTES = 1;
 	
 	@Override
 	public ProductEntity create(ProductCreateRequest createRequest) {
@@ -47,31 +50,35 @@ public class ManualCachingProductService implements ProductService {
 			product.setDescription(updateRequest.description());
 		}
 		
-		return productRepository.save(product);
+		var savedProduct = productRepository.save(product);
+		
+		String cacheKey = CACHE_KEY_PREFIX + id;
+		redisTemplate.delete(cacheKey);
+		log.info("Cache invalidated for updated product: id={}", id);
+		
+		return savedProduct;
 	}
 	
 	@Override
-	public ProductEntity getById(Long id) throws JsonProcessingException {
+	public ProductEntity getById(Long id) {
 		log.info("Getting product: id={}", id);
 		String cacheKey = CACHE_KEY_PREFIX + id;
 		
-		String objFromCache = stringRedisTemplate.opsForValue().get("product:" + id);
+		ProductEntity entityFromCache = redisTemplate.opsForValue().get(cacheKey);
 		
-		if (objFromCache != null) {
+		if (entityFromCache != null) {
 			log.info("Product found in cache: id={}", id);
-			return objectMapper.readValue(objFromCache, ProductEntity.class);
+			return entityFromCache;
 		}
-		log.info("Product not found in cache: id={}", id);
 		
+		log.info("Product not found in cache: id={}", id);
 		ProductEntity entityFromDb = productRepository.findById(id)
 			.orElseThrow(() -> new RuntimeException("Product not found: " + id));
 		
-		stringRedisTemplate.opsForValue()
-			.set(cacheKey, objectMapper.writeValueAsString(entityFromDb));
+		redisTemplate.opsForValue().set(cacheKey, entityFromDb, CACHE_TTL_MINUTES, TimeUnit.MINUTES);
 		log.info("Product cached: id={}", id);
 		
-		return productRepository.findById(id)
-			.orElseThrow(() -> new RuntimeException("Product not found: " + id));
+		return entityFromDb;
 	}
 	
 	
@@ -82,6 +89,10 @@ public class ManualCachingProductService implements ProductService {
 			throw new RuntimeException("Product not found: " + id);
 		}
 		productRepository.deleteById(id);
+		
+		String cacheKey = CACHE_KEY_PREFIX + id;
+		redisTemplate.delete(cacheKey);
+		log.info("Cache invalidated for deleted product: id={}", id);
 	}
 	
 }
